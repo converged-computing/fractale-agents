@@ -1,0 +1,8 @@
+OLD
+fractale_agents.egg-info
+build
+dist
+env
+.eggs
+__pycache__
+.fractale
