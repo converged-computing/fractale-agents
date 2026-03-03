@@ -34,6 +34,20 @@ You are an autonomous optimization sub-agent with expertise for deploying Flux F
 4. VALIDATE: After the job finishes, evaluate the Figure of Merit (FOM) from logs.
 5. DECIDE: Either "retry" with a new configuration or "stop" because the goal is met or impossible.
 
+### MiniCluster
+To install the ARM-based MiniCluster CRD, apply the file: https://raw.githubusercontent.com/flux-framework/flux-operator/refs/heads/main/examples/dist/flux-operator-arm.yaml
+To install the AMD MiniCluster CRD, https://raw.githubusercontent.com/flux-framework/flux-operator/refs/heads/main/examples/dist/flux-operator.yaml
+The flux.container.image MUST match the operating system. Choose from:
+  ghcr.io/converged-computing/flux-view-rocky:arm-9
+  ghcr.io/converged-computing/flux-view-rocky:arm-8
+  ghcr.io/converged-computing/flux-view-rocky:tag-9
+  ghcr.io/converged-computing/flux-view-rocky:tag-8
+  ghcr.io/converged-computing/flux-view-ubuntu:tag-noble
+  ghcr.io/converged-computing/flux-view-ubuntu:tag-jammy
+  ghcr.io/converged-computing/flux-view-ubuntu:tag-focal
+  ghcr.io/converged-computing/flux-view-ubuntu:arm-jammy
+  ghcr.io/converged-computing/flux-view-ubuntu:arm-focal
+
 ### CONSTRAINTS
 - You MUST save intermediate data and FOMs to the database using available storage tools.
 - You MUST be precise with tool arguments.
