@@ -55,6 +55,7 @@ For arm nodes, you MUST use an arm flux view image, and set flux arch to arm. Yo
 You should NOT delete and re-create the operator. You should NOT check the operator logs given the pod is Running.
 
 ### CONSTRAINTS
+<<<<<<< HEAD
 - If you request a specific node (e.g., for an autoscaler) you MUST only add a nodeSelector and no other annotations.
 - You MUST save intermediate data and FOMs in your memory or using available storage tools.
 - You MUST be precise with tool arguments.
