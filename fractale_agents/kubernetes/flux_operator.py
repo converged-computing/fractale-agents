@@ -48,11 +48,18 @@ The flux.container.image MUST match the operating system. Choose from:
   ghcr.io/converged-computing/flux-view-ubuntu:arm-jammy
   ghcr.io/converged-computing/flux-view-ubuntu:arm-focal
 
+If you are generating multiple MiniCluster, name them ordinally in increasing order.
+If you are getting logs for a MiniCluster, be mindful that the MiniCluster lead broker pod must be Completed to indicate the work is done.
+For arm nodes, you MUST use an arm flux view image, and set flux arch to arm. Your command MUST be a single line to give to flux submit - no custom or multi-line scripts.
+You should NOT delete and re-create the operator. You should NOT check the operator logs given the pod is Running.
+
 ### CONSTRAINTS
-- You MUST save intermediate data and FOMs to the database using available storage tools.
+- You MUST save intermediate data and FOMs in your memory or using available storage tools.
 - You MUST be precise with tool arguments.
+- When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
+  {"reason": "..."}
 - When you are finished, you MUST return a final JSON object:
-  {"decision": "stop", "summary": "...", "final_fom": <value>}
+  {"decision": "stop", "summary": "...", "final_fom": [<value1>,<value2>,<value3>]}
 """
 
 
@@ -73,30 +80,28 @@ class BaseSubAgent:
             turn += 1
             logger.info(f"🧠 [{self.__class__.name}] Turn {turn}/{max_turns}")
 
-            # 1. Ask the LLM
+            # Ask the LLM
             response_text, tool_calls = backend.generate_response(
                 prompt=current_prompt,
                 use_tools=True,
                 memory=True,
             )
 
-            # 2. Handle Empty Responses
+            # Handle Empty Responses
             if not response_text and not tool_calls:
                 current_prompt = "Your last response was empty. Please provide your next tool call or final response."
                 continue
 
-            # 3. ACT: Execute Tool Calls
+            # ACT: Execute Tool Calls
             if tool_calls:
                 current_prompt = ""
                 for call in tool_calls:
                     tool_result = await backend.call_tool(call)
-
-                    # Neutralize noisy logs/tracebacks before feeding back
                     safe_content = clean_output(tool_result.content)
                     current_prompt += f"\nTool '{call['name']}' returned:\n{safe_content}"
                 continue
 
-            # 4. PARSE: Look for terminal JSON
+            # Parse and look for terminal JSON
             try:
                 clean_json = utils.extract_code_block(response_text)
                 if not clean_json:
@@ -106,6 +111,14 @@ class BaseSubAgent:
                     continue
 
                 data = json.loads(clean_json)
+
+                # Update the user on the response
+                if "reason" in data and data["reason"]:
+                    logger.panel(
+                        title=f"🧠 [{self.__class__.name}] Thinking",
+                        message=data["reason"],
+                        color="blue",
+                    )
 
                 # Check for class-specific termination keys
                 if "status" in data or data.get("decision") == "stop":
@@ -148,7 +161,7 @@ class FluxBuildAgent(BaseSubAgent):
             },
             "max_turns": {
                 "type": "integer",
-                "default": 20,
+                "default": 100,
                 "description": "Maximum attempts to fix build errors.",
             },
         },
@@ -167,7 +180,7 @@ class FluxBuildAgent(BaseSubAgent):
         "required": ["status"],
     }
 
-    async def __call__(self, goal: str, push: bool = False, max_turns: int = 20) -> Dict[str, Any]:
+    async def __call__(self, goal: str, push: bool = False, max_turns: int = 100) -> Dict[str, Any]:
         context = f"Push to registry requested: {push}"
         return await self.execute_loop(BUILD_PROMPT, goal, context, max_turns)
 
@@ -196,7 +209,7 @@ class FluxOperatorAgent(BaseSubAgent):
             },
             "max_turns": {
                 "type": "integer",
-                "default": 30,
+                "default": 100,
                 "description": "Max turns for the optimization loop.",
             },
         },
@@ -220,7 +233,7 @@ class FluxOperatorAgent(BaseSubAgent):
     }
 
     async def __call__(
-        self, goal: str, task_context: str = "", max_turns: int = 30
+        self, goal: str, task_context: str = "", max_turns: int = 100
     ) -> Dict[str, Any]:
         result = await self.execute_loop(OPTIMIZE_SYSTEM_PROMPT, goal, task_context, max_turns)
 

@@ -20,6 +20,8 @@ You are an autonomous Optimization sub-agent. Your goal is to iteratively achiev
 - You MAY save all intermediate data and FOMs to the database using available storage tools.
 - You MUST be precise with tool arguments.
 - You MUST make tool or sub-agent or prompt requests as needed. The output will be returned to you.
+- When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
+  {"reason": "..."}
 - When you are finished, you MUST not call tools, and you MUST return a final JSON object with:
   {"decision": "stop", "summary": "Detailed explanation of result", "final_fom": <value>}
 """
@@ -123,6 +125,14 @@ class OptimizeAgent:
             else:
                 clean_json = utils.extract_code_block(response_text)
                 decision_data = json.loads(clean_json)
+
+                # Update the user on the response
+                if "reason" in decision_data and decision_data["reason"]:
+                    logger.panel(
+                        title=f"🧠 [{self.__class__.name}] Thinking",
+                        message=decision_data["reason"],
+                        color="blue",
+                    )
 
                 if decision_data.get("decision") == "stop":
                     logger.info("✅ [Sub-Agent] Terminal state reached.")
