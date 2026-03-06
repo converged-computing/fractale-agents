@@ -1,6 +1,6 @@
 import inspect
 import re
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -13,6 +13,20 @@ def is_callable(executable):
     Determine if an executable (class) is callable.
     """
     return hasattr(executable, "__call__") and inspect.iscoroutinefunction(executable.__call__)
+
+
+def clean_output(data: Any) -> str:
+    """
+    Neutralizes characters that trigger malformed JSON responses
+    without removing technical content (tracebacks).
+    """
+    text = str(data)
+    text = text.replace("{", "❴").replace("}", "❵")
+    text = text.replace("[", "❲").replace("]", "❳")
+    text = text.replace('"', "'")
+    text = text.replace("\\", "/")
+    lines = text.splitlines()
+    return "\n".join([f"| {line}" for line in lines])
 
 
 def get_user_validation(

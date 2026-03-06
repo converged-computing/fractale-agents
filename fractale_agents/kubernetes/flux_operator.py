@@ -1,9 +1,10 @@
 import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import fractale_agents.utils as utils
+from fractale_agents.agent import BaseSubAgent
 from fractale_agents.logger import logger
 
 BUILD_PROMPT = """
@@ -54,86 +55,14 @@ For arm nodes, you MUST use an arm flux view image, and set flux arch to arm. Yo
 You should NOT delete and re-create the operator. You should NOT check the operator logs given the pod is Running.
 
 ### CONSTRAINTS
+- If you request a specific node (e.g., for an autoscaler) you MUST only add a nodeSelector and no other annotations.
 - You MUST save intermediate data and FOMs in your memory or using available storage tools.
 - You MUST be precise with tool arguments.
 - When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
   {"reason": "..."}
 - When you are finished, you MUST return a final JSON object:
-  {"decision": "stop", "summary": "...", "final_fom": [<value1>,<value2>,<value3>]}
+  {"action": "stop", "summary": "...", "final_fom": [<value1>,<value2>,<value3>]}
 """
-
-
-class BaseSubAgent:
-    """
-    Common base for autonomous sub-agents managing internal turn-based loops.
-    """
-
-    async def execute_loop(
-        self, system_prompt: str, goal: str, context: str, max_turns: int
-    ) -> Dict[str, Any]:
-        from fractale.agents.base import backend
-
-        current_prompt = f"{system_prompt}\n\n### USER GOAL\n{goal}\n\n### CONTEXT\n{context}"
-        turn = 0
-
-        while turn < max_turns:
-            turn += 1
-            logger.info(f"🧠 [{self.__class__.name}] Turn {turn}/{max_turns}")
-
-            # Ask the LLM
-            response_text, tool_calls = backend.generate_response(
-                prompt=current_prompt,
-                use_tools=True,
-                memory=True,
-            )
-
-            # Handle Empty Responses
-            if not response_text and not tool_calls:
-                current_prompt = "Your last response was empty. Please provide your next tool call or final response."
-                continue
-
-            # ACT: Execute Tool Calls
-            if tool_calls:
-                current_prompt = ""
-                for call in tool_calls:
-                    tool_result = await backend.call_tool(call)
-                    safe_content = clean_output(tool_result.content)
-                    current_prompt += f"\nTool '{call['name']}' returned:\n{safe_content}"
-                continue
-
-            # Parse and look for terminal JSON
-            try:
-                clean_json = utils.extract_code_block(response_text)
-                if not clean_json:
-                    current_prompt = (
-                        "Please provide your final status/decision in a JSON markdown code block."
-                    )
-                    continue
-
-                data = json.loads(clean_json)
-
-                # Update the user on the response
-                if "reason" in data and data["reason"]:
-                    logger.panel(
-                        title=f"🧠 [{self.__class__.name}] Thinking",
-                        message=data["reason"],
-                        color="blue",
-                    )
-
-                # Check for class-specific termination keys
-                if "status" in data or data.get("decision") == "stop":
-                    logger.info(f"✅ [{self.__class__.name}] Goal reached.")
-                    data["turns_taken"] = turn
-                    return data
-
-            except (json.JSONDecodeError, KeyError):
-                current_prompt = "Your response did not contain valid JSON. Please provide the required JSON structure."
-
-        return {
-            "status": "limit_reached",
-            "message": f"Exceeded {max_turns} turns.",
-            "goal": goal,
-        }
 
 
 class FluxBuildAgent(BaseSubAgent):
@@ -180,9 +109,25 @@ class FluxBuildAgent(BaseSubAgent):
         "required": ["status"],
     }
 
-    async def __call__(self, goal: str, push: bool = False, max_turns: int = 100) -> Dict[str, Any]:
+    async def __call__(
+        self,
+        goal: str,
+        push: bool = False,
+        max_turns: int = 100,
+        process_callback: Optional[
+            Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
+        ] = None,
+    ) -> Dict[str, Any]:
         context = f"Push to registry requested: {push}"
-        return await self.execute_loop(BUILD_PROMPT, goal, context, max_turns)
+
+        # Call the inherited execute_loop from BaseSubAgent
+        return await self.execute_loop(
+            system_prompt=BUILD_PROMPT,
+            goal=goal,
+            context=context,
+            max_turns=max_turns,
+            process_callback=process_callback,
+        )
 
 
 class FluxOperatorAgent(BaseSubAgent):
@@ -233,25 +178,23 @@ class FluxOperatorAgent(BaseSubAgent):
     }
 
     async def __call__(
-        self, goal: str, task_context: str = "", max_turns: int = 100
+        self,
+        goal: str,
+        task_context: str = "",
+        max_turns: int = 100,
+        process_callback: Optional[
+            Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
+        ] = None,
     ) -> Dict[str, Any]:
-        result = await self.execute_loop(OPTIMIZE_SYSTEM_PROMPT, goal, task_context, max_turns)
 
-        # Standardize 'decision: stop' to 'status: completed' for the output schema
-        if result.get("decision") == "stop":
+        # Call the inherited execute_loop from BaseSubAgent
+        result = await self.execute_loop(
+            system_prompt=OPTIMIZE_SYSTEM_PROMPT,
+            goal=goal,
+            context=task_context,
+            max_turns=max_turns,
+            process_callback=process_callback,
+        )
+        if result.get("action") == "stop":
             result["status"] = "completed"
         return result
-
-
-def clean_output(data: Any) -> str:
-    """
-    Neutralizes characters that trigger malformed JSON responses
-    without removing technical content (tracebacks).
-    """
-    text = str(data)
-    text = text.replace("{", "❴").replace("}", "❵")
-    text = text.replace("[", "❲").replace("]", "❳")
-    text = text.replace('"', "'")
-    text = text.replace("\\", "/")
-    lines = text.splitlines()
-    return "\n".join([f"| {line}" for line in lines])
