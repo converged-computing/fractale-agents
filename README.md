@@ -18,6 +18,7 @@ The following agents are availble.
 | flux-build | optimized to build containers for the Flux Operator | fractale_agents.kubernetes.FluxBuildAgent |
 | result_parse | Parse specific metrics from output logs | fractale_agents.parsers.ResultParserAgent |
 | optimize | General optimization agent | fractale_agents.optimize.OptimizeAgent |
+| jobspec-transform | Job specification transformation agent | fractale_agents.hpc.job.JobspecTransformAgent |
 
 The general prompt agent is provisioned by fractale directly, `fractale.agents.general.PromptAgent`.
 Would you like to see an expert added? Please open an issue and let us know.
