@@ -29,6 +29,7 @@ class BaseSubAgent:
         while turn < max_turns:
             turn += 1
             logger.info(f"🧠 [{self.__class__.__name__}] Turn {turn}/{max_turns}")
+            logger.panel(current_prompt, title="Agent Prompt", color="green")
 
             response_text, tool_calls = backend.generate_response(
                 prompt=current_prompt,

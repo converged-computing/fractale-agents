@@ -1,1 +1,1 @@
-from .generate import OptimizeAgent
+from .general import OptimizeAgent
