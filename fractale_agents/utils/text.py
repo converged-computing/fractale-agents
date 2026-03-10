@@ -1,6 +1,6 @@
 import inspect
 import re
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
