@@ -47,8 +47,14 @@ class BaseSubAgent:
                 current_prompt = ""
                 for call in tool_calls:
                     tool_result = await backend.call_tool(call)
-                    safe_content = utils.clean_output(tool_result.content)
+                    # We can't always clean the content. If not, use raw content
+                    try:
+                        safe_content = utils.clean_output(tool_result.content)
+                    except:
+                        safe_content = tool_result.content
                     current_prompt += f"\nTool '{call['name']}' returned:\n{safe_content}"
+                    # Reset tool calls
+                    tool_calls = []
                 continue
 
             # Case 2: Parse JSON
@@ -96,7 +102,7 @@ class BaseSubAgent:
                             continue
 
                 # Normal class-specific termination checks
-                if "action" in data or data.get("action") == "stop":
+                if "action" in data and data.get("action") == "stop":
                     logger.info(f"✅ [{self.__class__.__name__}] Goal reached.")
                     data["turns_taken"] = turn
                     return data

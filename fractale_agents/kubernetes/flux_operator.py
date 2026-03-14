@@ -58,6 +58,9 @@ You should NOT delete and re-create the operator. You should NOT check the opera
 - If you request a specific node (e.g., for an autoscaler) you MUST only add a nodeSelector and no other annotations.
 - You MUST save intermediate data and FOMs in your memory or using available storage tools.
 - You MUST be precise with tool arguments.
+- You MUST NOT include any flux command in your MiniCluster command. The operator wraps in a flux submit.
+- You MUST wait for pods to initialize or be ready by sleeping and you must NOT delete preemptively.
+- You must only install the Flux operator once and you MUST NOT delete it and reinstall.
 - When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
   {"reason": "..."}
 - When you are finished, you MUST return a final JSON object:
@@ -195,6 +198,7 @@ class FluxOperatorAgent(BaseSubAgent):
             max_turns=max_turns,
             process_callback=process_callback,
         )
+        print(result)
         if result.get("action") == "stop":
             result["status"] = "completed"
         return result
