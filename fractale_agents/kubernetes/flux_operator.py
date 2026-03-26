@@ -59,7 +59,9 @@ You should NOT delete and re-create the operator. You should NOT check the opera
 - You MUST save intermediate data and FOMs in your memory or using available storage tools.
 - You MUST be precise with tool arguments.
 - You MUST NOT include any flux command in your MiniCluster command. The operator wraps in a flux submit.
-- You MUST wait for pods to initialize or be ready by sleeping and you must NOT delete preemptively.
+- For MiniCluster tasks, you SHOULD maximize the single node resources. You MUST set requests/limits for CPU to be just UNDER that.
+- You MUST wait for pods to initialize or be ready by sleeping and you MUST wait for them to Complete before reattempting.
+- You MUST NOT delete MiniClusters preemptively before you are sure about the outcome.
 - You must only install the Flux operator once and you MUST NOT delete it and reinstall.
 - When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
   {"reason": "..."}
