@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import fractale_agents.utils as utils
@@ -48,11 +47,12 @@ The flux.container.image MUST match the operating system. Choose from:
   ghcr.io/converged-computing/flux-view-ubuntu:tag-focal
   ghcr.io/converged-computing/flux-view-ubuntu:arm-jammy
   ghcr.io/converged-computing/flux-view-ubuntu:arm-focal
+  ghcr.io/converged-computing/flux-view-ubuntu:arm-noble
 
 If you are generating multiple MiniCluster, name them ordinally in increasing order.
-If you are getting logs for a MiniCluster, be mindful that the MiniCluster lead broker pod must be Completed to indicate the work is done.
 For arm nodes, you MUST use an arm flux view image, and set flux arch to arm. Your command MUST be a single line to give to flux submit - no custom or multi-line scripts.
 You should NOT delete and re-create the operator. You should NOT check the operator logs given the pod is Running.
+If you are getting logs for a MiniCluster, be mindful that the MiniCluster lead broker pod must be Completed to indicate the work is done.
 
 ### CONSTRAINTS
 - If you request a specific node (e.g., for an autoscaler) you MUST only add a nodeSelector and no other annotations.
@@ -192,11 +192,15 @@ class FluxOperatorAgent(BaseSubAgent):
         ] = None,
     ) -> Dict[str, Any]:
 
+        # We want to ask for the kubernetes events provider
+        subscriptions = [{"provider": "KubernetesEvents"}]
+
         # Call the inherited execute_loop from BaseSubAgent
         result = await self.execute_loop(
             system_prompt=OPTIMIZE_SYSTEM_PROMPT,
             goal=goal,
             context=task_context,
+            subscriptions=subscriptions,
             max_turns=max_turns,
             process_callback=process_callback,
         )

@@ -10,7 +10,7 @@ A sub-agent is a single step in a state machine that can call other sub-agents, 
 
 ## Agents
 
-The following agents are availble.
+The following agents are available.
 
 | Name | Description | Path |
 |----- | ----------- | ---- |
