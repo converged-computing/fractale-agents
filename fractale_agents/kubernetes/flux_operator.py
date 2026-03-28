@@ -21,7 +21,7 @@ You are an autonomous build sub-agent with expertise for building containers to 
 - You MUST NOT do a multi-stage build.
 - You MUST put all relevant executables on the PATH.
 - You MUST return a final JSON object when the build is finished or unrecoverable.
-- Final JSON format: {"status": "success|failure", "summary": "...", "container": "<URI>"}
+- Final JSON format: {"action": "stop", "status": "success|failure", "summary": "...", "container": "<URI>"}
 """
 
 OPTIMIZE_SYSTEM_PROMPT = """
@@ -32,22 +32,14 @@ You are an autonomous optimization sub-agent with expertise for deploying Flux F
 2. ANALYZE: Check previous results (via database or logs) to understand the current state.
 3. ACT: Decide on a configuration tweak (e.g., changing nodes, cores, or environment variables). Deploy using tools (e.g., kubectl_apply).
 4. VALIDATE: After the job finishes, evaluate the Figure of Merit (FOM) from logs.
-5. DECIDE: Either "retry" with a new configuration or "stop" because the goal is met or impossible.
+5. DECIDE: Either "retry" with a new configuration, "wait" to wait for events, or "stop" because the goal is met or impossible.
 
 ### MiniCluster
 To install the ARM-based MiniCluster CRD, apply the file: https://raw.githubusercontent.com/flux-framework/flux-operator/refs/heads/main/examples/dist/flux-operator-arm.yaml
 To install the AMD MiniCluster CRD, https://raw.githubusercontent.com/flux-framework/flux-operator/refs/heads/main/examples/dist/flux-operator.yaml
 The flux.container.image MUST match the operating system. Choose from:
-  ghcr.io/converged-computing/flux-view-rocky:arm-9
-  ghcr.io/converged-computing/flux-view-rocky:arm-8
-  ghcr.io/converged-computing/flux-view-rocky:tag-9
-  ghcr.io/converged-computing/flux-view-rocky:tag-8
-  ghcr.io/converged-computing/flux-view-ubuntu:tag-noble
-  ghcr.io/converged-computing/flux-view-ubuntu:tag-jammy
-  ghcr.io/converged-computing/flux-view-ubuntu:tag-focal
-  ghcr.io/converged-computing/flux-view-ubuntu:arm-jammy
-  ghcr.io/converged-computing/flux-view-ubuntu:arm-focal
-  ghcr.io/converged-computing/flux-view-ubuntu:arm-noble
+  ghcr.io/converged-computing/flux-view-rocky. Tag options: arm-9, arm-8, tag-9, or tag-8
+  ghcr.io/converged-computing/flux-view-ubuntu. Tag options: tag-noble, tag-jammy, tag-focal, arm-focal, arm-noble, arm-jammy
 
 If you are generating multiple MiniCluster, name them ordinally in increasing order.
 For arm nodes, you MUST use an arm flux view image, and set flux arch to arm. Your command MUST be a single line to give to flux submit - no custom or multi-line scripts.
@@ -67,6 +59,7 @@ If you are getting logs for a MiniCluster, be mindful that the MiniCluster lead 
   {"reason": "..."}
 - When you are finished, you MUST return a final JSON object:
   {"action": "stop", "summary": "...", "final_fom": [<value1>,<value2>,<value3>]}
+- You SHOULD use kubectl_wait for the Job to be completed and then read the log.
 """
 
 
@@ -191,6 +184,10 @@ class FluxOperatorAgent(BaseSubAgent):
             Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
         ] = None,
     ) -> Dict[str, Any]:
+
+        # Params will filter to look for index-0 broker pods that are finished
+        # In practice, too many events is too much noise.
+        params = {"resource_type": "pod", "name_pattern": "-0-", "only_completed": True}
 
         # We want to ask for the kubernetes events provider
         subscriptions = [{"provider": "KubernetesEvents"}]

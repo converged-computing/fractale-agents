@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import fractale.utils as utils
@@ -7,22 +8,41 @@ from fastmcp import Client
 from fractale.agents.base import AgentBase
 from fractale.logger import logger
 
+prompts = {
+    "events_wait": '- For your final "action" above, if you want to wait for an event to return you MUST put "action": "wait"'
+}
+
 
 class BaseSubAgent(AgentBase):
     """
     Common base for autonomous sub-agents with Reactive Event support.
     """
 
-    def __init__(self):
+    def __init__(self, wait_timeout_seconds=600):
         super().__init__()
 
         # Accumulates events in the background between turns (like a buffer or queue)
         self.events = []
         self.subscriptions = set()
 
+        # Events. First, to wake up an agent.
+        self._wake_event = asyncio.Event()
+        self.wait_timeout = wait_timeout_seconds
+        self._last_turn_time = None
+
         # Create the client with the transport. This is created in the parent init, and we add
         # the handler to it.
         self.mcp_client = Client(self.transport, message_handler=self.handle_notification)
+
+    def calculate_elapsed_time(self):
+        """
+        What the function title says.
+        """
+        # instead of time.time, which is influenced by system updates (did not know that)
+        now = time.monotonic()
+        elapsed = int(now - self._last_turn_time)
+        self._last_turn_time = now
+        return elapsed
 
     async def handle_notification(self, notification: Any):
         """
@@ -48,6 +68,8 @@ class BaseSubAgent(AgentBase):
                 event_data = payload.get("data")
                 self.events.append({"provider": provider, "data": event_data})
                 logger.info(f"📩 Received Event from {provider}")
+                # If we are waiting, wake up!
+                self._wake_event.set()
 
     def add_subscription(self, result):
         """
@@ -73,6 +95,14 @@ class BaseSubAgent(AgentBase):
             except:
                 pass
 
+    def init_instructions(self, system_prompt, goal, context, add_events=False):
+        """
+        Create the initial system prompt.
+        """
+        if add_events:
+            system_prompt += prompts["events_wait"]
+        return f"{system_prompt}\n\n### USER GOAL\n{goal}\n\n### CONTEXT\n{context}"
+
     def parse_safe_content(self, result, required=False):
         """
         Shared function for try/except to parse content.
@@ -83,6 +113,61 @@ class BaseSubAgent(AgentBase):
             if required:
                 return None
             return result
+
+    def process_events(self):
+        """
+        Process events to update the agent.
+
+        1. Grab current events, clear queue and wake event
+        2. De-dup and summarize
+        3. Return a summary for the agent!
+        """
+        events_to_process = list(self.events)
+        self.events.clear()
+        self._wake_event.clear()
+
+        # Let's avoid any possible duplicates, assume receiving is imperfect
+        seen = set()
+        event_log = []
+        for event in events_to_process:
+            event_data = json.dumps(event["data"])
+            if event_data not in seen:
+                seen.add(event_data)
+                event_log.append(f"{event['provider']} {event_data}")
+        return "\n".join(event_log)
+
+    async def call_tools(self, backend, tool_calls):
+        """
+        Parse tool calls into a prompt for the agent.
+        """
+        current_prompt = ""
+        for call in tool_calls:
+            result = await backend.call_tool(call)
+
+            # Catch autonomous subscriptions if the agent discovers the tool
+            if call["name"] == "subscribe":
+                self.add_subscription(result)
+            content = self.parse_safe_content(result.content)
+            current_prompt += f"\n\nTool '{call['name']}' returned:\n{content}"
+        current_prompt += "\nYou MUST request action: wait if there is nothing logical to do."
+        return current_prompt
+
+    async def wait_for_events(self):
+        """
+        Pause execution until the wait event is triggered.
+        """
+        # Ensure the wake event is not set before we start listening
+        self._wake_event.clear()
+
+        try:
+            # Wait for the background listener to set the event or hit the 10-minute (600s) timeout.
+            await asyncio.wait_for(self._wake_event.wait(), timeout=self.wait_timeout)
+            logger.info(f"🔔 [{self.__class__.__name__}] Event received! Resuming loop.")
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⏰ [{self.__class__.__name__}] Wait timeout ({self.wait_timeout}s) reached."
+            )
+            # We continue to the next turn; the elapsed time logic will tell the LLM it timed out
 
     async def execute_loop(
         self,
@@ -99,7 +184,6 @@ class BaseSubAgent(AgentBase):
         """
         from fractale.agents.base import backend
 
-        # TODO vsoch: what to do if agent stops calls, we still have events?
         async with self.mcp_client:
 
             # Handle subscriptions (these are explicitly defined by us, the developers)
@@ -123,28 +207,25 @@ class BaseSubAgent(AgentBase):
                     except Exception as e:
                         logger.error(f"⚠️ Failed proactive subscription: {e}")
 
-            # base_instructions persists tool results across turns
             turn = 0
-            current_prompt = f"{system_prompt}\n\n### USER GOAL\n{goal}\n\n### CONTEXT\n{context}"
+            current_prompt = self.init_instructions(
+                system_prompt, goal, context, subscriptions is not None
+            )
 
+            self._last_turn_time = time.monotonic()
             while turn < max_turns:
                 turn += 1
+                elapsed = self.calculate_elapsed_time()
+
+                # I'm not sure if this is helpful in practice, trying it out
+                if elapsed > 300:
+                    current_prompt += f"\nIt has been {elapsed} seconds since your last turn.\n"
 
                 # This is where we are going to grab events that have come in from notifications (mcp json-rpc)
-                # since the last turn. In doing so, we clear the buffer.
+                # and are added to the buffer, which is what happens if the LLM is processing.
+                # Otherwise, they are delivered immediately.
                 if self.events:
-                    events_to_process = list(self.events)
-                    self.events.clear()
-
-                    # Let's avoid any possible duplicates, assume receiving is imperfect
-                    seen = set()
-                    event_log = []
-                    for event in events_to_process:
-                        event_data = json.dumps(e["data"])
-                        if event_data not in seen:
-                            seen.add(event_data)
-                            event_log.append(f"{event['provider']} {event_data}")
-                    event_log = "\n".join(event_log)
+                    event_log = self.process_events()
 
                     # Prepend the reactive news to the turn prompt.
                     # TODO vsoch: check how long the outputs are here, we might want to update event
@@ -158,7 +239,8 @@ class BaseSubAgent(AgentBase):
 
                 logger.info(f"🧠 [{self.__class__.__name__}] Turn {turn}/{max_turns}")
 
-                # Add more verbosity
+                # Add more verbosity - this is primarily for (us) the develoepr user
+                # I hate LLM tools that "go away and do stuff" and I'm supposed to be OK with that.
                 logger.panel(
                     title=f"🧠[{self.__class__.__name__}] Prompt",
                     message=current_prompt,
@@ -170,27 +252,16 @@ class BaseSubAgent(AgentBase):
                     memory=True,
                 )
 
+                # At this point, we used the "current prompt" and are going to reset/work on it again
                 # Handle empty output
                 if not response_text and not tool_calls:
                     current_prompt = "\n\nYour last response was empty. Provide your next tool call or final response."
                     continue
 
-                # Tool execution
+                # Tool execution. Call, get prompt, and clear tool calls for next time
                 if tool_calls:
-                    current_prompt = ""
-                    for call in tool_calls:
-                        result = await backend.call_tool(call)
-
-                        # Catch autonomous subscriptions if the agent discovers the tool
-                        if call["name"] == "subscribe":
-                            self.add_subscription(result)
-                        content = self.parse_safe_content(result.content)
-                        current_prompt += f"\n\nTool '{call['name']}' returned:\n{content}"
-
-                    # Reset tool calls
+                    current_prompt = await self.call_tools(backend, tool_calls)
                     tool_calls = []
-
-                    # Go back to top of loop
                     continue
 
                 # Json Parsing
@@ -203,8 +274,16 @@ class BaseSubAgent(AgentBase):
 
                 data = json.loads(clean_json)
 
+                # The agent wants to wait for events. This waits until we have events in the queue
+                # which will trigger the wake event, and then we resume execution
+                if data.get("action") == "wait":
+                    reason = data.get("reason", "Waiting for events.")
+                    logger.info(f"⏳ [{self.__class__.__name__}] Agent yielding. Reason: {reason}")
+                    await self.wait_for_events()
+                    continue
+
                 # A reason can be provided in data
-                if "reason" in data and data["reason"]:
+                if data.get("reason"):
                     logger.panel(
                         title=f"🧠[{self.__class__.__name__}] Thinking",
                         message=data["reason"],
@@ -220,13 +299,7 @@ class BaseSubAgent(AgentBase):
                             logger.info(
                                 f"🛑 [{self.__class__.__name__}] Force stopped by callback."
                             )
-                            data.update(
-                                {
-                                    "turns_taken": turn,
-                                    "goal": goal,
-                                    "reason": "Interrupted by caller",
-                                }
-                            )
+                            data.update({"turns_taken": turn, "goal": goal, "reason": "Stop request"})
                             return data
                         elif "instruction" in instruction:
                             current_prompt = instruction["instruction"]

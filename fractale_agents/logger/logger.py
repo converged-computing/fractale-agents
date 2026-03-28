@@ -178,6 +178,7 @@ class Logger:
         title = f"[{color}]{title}[/{color}]"
         if isinstance(truncate, int) and len(message) >= truncate:
             message = message[:truncate]
+        message = message.strip().strip('').strip('\n')
         return self.custom(message, title, border_style=color)
 
     def text_handler(self, msg):
