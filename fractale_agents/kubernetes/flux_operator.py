@@ -32,7 +32,7 @@ You are an autonomous optimization sub-agent with expertise for deploying Flux F
 2. ANALYZE: Check previous results (via database or logs) to understand the current state.
 3. ACT: Decide on a configuration tweak (e.g., changing nodes, cores, or environment variables). Deploy using tools (e.g., kubectl_apply).
 4. VALIDATE: After the job finishes, evaluate the Figure of Merit (FOM) from logs.
-5. DECIDE: Either "retry" with a new configuration, "wait" to wait for events, or "stop" because the goal is met or impossible.
+5. DECIDE: Either "retry" with a new configuration, WAIT for events, or "stop" because the goal is met or impossible.
 
 ### MiniCluster
 To install the ARM-based MiniCluster CRD, apply the file: https://raw.githubusercontent.com/flux-framework/flux-operator/refs/heads/main/examples/dist/flux-operator-arm.yaml
@@ -45,21 +45,24 @@ If you are generating multiple MiniCluster, name them ordinally in increasing or
 For arm nodes, you MUST use an arm flux view image, and set flux arch to arm. Your command MUST be a single line to give to flux submit - no custom or multi-line scripts.
 You should NOT delete and re-create the operator. You should NOT check the operator logs given the pod is Running.
 If you are getting logs for a MiniCluster, be mindful that the MiniCluster lead broker pod must be Completed to indicate the work is done.
+An error in the workflow log is NOT an issue with the operator deployment. It IS likely an issue with your application parameters or environment.
 
 ### CONSTRAINTS
 - If you request a specific node (e.g., for an autoscaler) you MUST only add a nodeSelector and no other annotations.
 - You MUST save intermediate data and FOMs in your memory or using available storage tools.
 - You MUST be precise with tool arguments.
 - You MUST NOT include any flux command in your MiniCluster command. The operator wraps in a flux submit.
-- For MiniCluster tasks, you SHOULD maximize the single node resources. You MUST set requests/limits for CPU to be just UNDER that.
+- You MUST use maximum single cores for MiniCluster tasks IF instructed. You MUST set requests/limits for CPU to be just UNDER that.
 - You MUST wait for pods to initialize or be ready by sleeping and you MUST wait for them to Complete before reattempting.
 - You MUST NOT delete MiniClusters preemptively before you are sure about the outcome.
 - You must only install the Flux operator once and you MUST NOT delete it and reinstall.
+- If you wait a long time and a job does not seem to be completing, you MUST check status or events to ensure it was not OOMKilled.
+- If you hit an OOMKilled, you must make an effort to carefully reduce the problem size to find an optimal between that and your previous working run.
+- If a wall or running time is available, You MUST adjust any wait times to account for that.
 - When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
   {"reason": "..."}
 - When you are finished, you MUST return a final JSON object:
   {"action": "stop", "summary": "...", "final_fom": [<value1>,<value2>,<value3>]}
-- You SHOULD use kubectl_wait for the Job to be completed and then read the log.
 """
 
 
@@ -88,7 +91,7 @@ class FluxBuildAgent(BaseSubAgent):
             },
             "max_turns": {
                 "type": "integer",
-                "default": 100,
+                "default": 500,
                 "description": "Maximum attempts to fix build errors.",
             },
         },
@@ -111,7 +114,7 @@ class FluxBuildAgent(BaseSubAgent):
         self,
         goal: str,
         push: bool = False,
-        max_turns: int = 100,
+        max_turns: int = 500,
         process_callback: Optional[
             Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
         ] = None,
@@ -152,7 +155,7 @@ class FluxOperatorAgent(BaseSubAgent):
             },
             "max_turns": {
                 "type": "integer",
-                "default": 100,
+                "default": 500,
                 "description": "Max turns for the optimization loop.",
             },
         },
@@ -179,7 +182,7 @@ class FluxOperatorAgent(BaseSubAgent):
         self,
         goal: str,
         task_context: str = "",
-        max_turns: int = 100,
+        max_turns: int = 500,
         process_callback: Optional[
             Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
         ] = None,

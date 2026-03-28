@@ -109,9 +109,11 @@ class BaseSubAgent(AgentBase):
         """
         try:
             return utils.clean_output(result)
-        except:
+        except Exception as e:
             if required:
+                print(f"   Issue parsing result: {result}")
                 return None
+            print(f"   Issue parsing result, considered OK: {result}")
             return result
 
     def process_events(self):
@@ -148,8 +150,7 @@ class BaseSubAgent(AgentBase):
             if call["name"] == "subscribe":
                 self.add_subscription(result)
             content = self.parse_safe_content(result.content)
-            current_prompt += f"\n\nTool '{call['name']}' returned:\n{content}"
-        current_prompt += "\nYou MUST request action: wait if there is nothing logical to do."
+            current_prompt += f"\nTool '{call['name']}' returned:\n{content}"
         return current_prompt
 
     async def wait_for_events(self):
@@ -194,7 +195,7 @@ class BaseSubAgent(AgentBase):
                     # Don't assume the server HAS the tool, but it should.
                     try:
                         # This is an explicit call to subscribe (the agent can make it too)
-                        result = await self.call_tool(
+                        subscription_result = await self.call_tool(
                             {
                                 "name": "subscribe",
                                 "args": {
@@ -203,7 +204,7 @@ class BaseSubAgent(AgentBase):
                                 },
                             }
                         )
-                        self.add_subscription(result)
+                        self.add_subscription(subscription_result)
                     except Exception as e:
                         logger.error(f"⚠️ Failed proactive subscription: {e}")
 
@@ -213,6 +214,7 @@ class BaseSubAgent(AgentBase):
             )
 
             self._last_turn_time = time.monotonic()
+            attempts_parsing = 0
             while turn < max_turns:
                 turn += 1
                 elapsed = self.calculate_elapsed_time()
@@ -265,18 +267,32 @@ class BaseSubAgent(AgentBase):
                     continue
 
                 # Json Parsing
-                clean_json = self.parse_safe_content(result.content, required=True)
-                if not clean_json:
+                try:
+                    clean_json = utils.extract_code_block(response_text)
+                    if not clean_json:
+                        data = json.loads(response_text)
+                    else:
+                        data = json.loads(clean_json)
+                    attempts_parsing = 0
+                except Exception as e:
+                    # Important to show human what is going on.
+                    print(f"Issue cleaning json: {response_text}: {e}")
+                    attempts_parsing += 1
                     current_prompt = (
                         "Please provide your final status/decision in a JSON markdown code block."
                     )
+                    if attempts_parsing >= 20:
+                        print("Returning early, cannot parse.")
+                        return {
+                            "status": "failed",
+                            "message": f"Failed parsing agent response {result.content}",
+                            "turns_taken": turn,
+                        }
                     continue
-
-                data = json.loads(clean_json)
 
                 # The agent wants to wait for events. This waits until we have events in the queue
                 # which will trigger the wake event, and then we resume execution
-                if data.get("action") == "wait":
+                if data.get("action") == "wait" or "WAIT" in response_text:
                     reason = data.get("reason", "Waiting for events.")
                     logger.info(f"⏳ [{self.__class__.__name__}] Agent yielding. Reason: {reason}")
                     await self.wait_for_events()
@@ -299,7 +315,9 @@ class BaseSubAgent(AgentBase):
                             logger.info(
                                 f"🛑 [{self.__class__.__name__}] Force stopped by callback."
                             )
-                            data.update({"turns_taken": turn, "goal": goal, "reason": "Stop request"})
+                            data.update(
+                                {"turns_taken": turn, "goal": goal, "reason": "Stop request"}
+                            )
                             return data
                         elif "instruction" in instruction:
                             current_prompt = instruction["instruction"]
