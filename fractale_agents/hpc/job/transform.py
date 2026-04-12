@@ -5,32 +5,44 @@ import fractale_agents.utils as utils
 from fractale_agents.agent import BaseSubAgent
 from fractale_agents.logger import logger
 
-transform_prompt = f"""### PERSONA
-You are an autonomous build sub-agent with expertise in transforming job specifications.
+from .common import shared_constraints
 
-### REQUIREMENTS & CONSTRAINTS
-- You MUST not make up directives that do not exist.
-- You MUST preserve as many options as possible from the original.
+transform_prompt = f"""### PERSONA
+You are an autonomous sub-agent with expertise in transforming job specifications.
+
+{shared_constraints}
 - If there is a directive that does not translate, you MUST leave it out and add a comment about the performance implications of the omission.
+- You MUST preserve as many options as possible from the original.
 - If you have a tool available, you MUST use it to validate the conversion.
 - If you do not have a tool available, you MUST provide a "reason" the script is valid.
 
 ### INSTRUCTIONS
 1. Analyze the original script provided in the CONTEXT.
 2. Write a new script that converts from %s to %s.
-3. When you have your finished job specification, return it in a JSON markdown code block with the key "jobspec".
-4. If the input script is not a workload manager batch file, you MUST return the JSON "jobspec" value as "noop".
+3. Return the finished job specification in a JSON markdown code block with the key "jobspec".
+4. Scrutinize your result and provide a list of "issues" one per item, in a "missing" return value.
+  An issue might be:
+    UNKNOWN_TO_ME: There is a parameter I am not familiar with that I cannot figure out (and provide detail)
+    NO_ANALOGOUS: The from parameter has no analogous translation (and provide it)
+    MISSING: You are not aware of any possible conversion (and details)
+5. If you can predict the performance or other implications of the conversion, include them in "implications"
+6. If the input script is not a workload manager batch file, you MUST return the JSON "jobspec" value as "noop".
+
+- When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
+  {"reason": "..."}
+- When you are finished, you MUST return a final JSON object:
+  {"action": "stop", "summary": "...", "issues": ["NO_ANALOGOUS: the parameter..."], "implications": "...", "jobspec": "#!/bin/bash ..."}
 """
 
 
-class JobspecTransformAgent(BaseSubAgent):
+class JobTransformAgent(BaseSubAgent):
     """
     Agent optimized to transform workload manager job specifications (e.g., Slurm to Flux).
     """
 
-    name = "transform"
+    name = "job-transform"
     description = (
-        "An autonomous expert agent that converts job specifications (batch scripts) "
+        "An expert agent that converts job specifications (batch scripts) "
         "between different workload managers (e.g., SLURM to Flux). It can validate "
         "conversions and iteratively fix errors based on previous attempts."
     )
@@ -103,8 +115,10 @@ class JobspecTransformAgent(BaseSubAgent):
         """
         Executes the job specification transformation loop.
         """
+        from_manager = from_manger or "the detected workload manager"
 
-        # 1. Construct the dynamic Goal
+        # System prompt and goal
+        system_prompt = transform_prompt % (from_manager, to_manager)
         if error is not None:
             goal = (
                 f"You previously attempted to convert a job specification and it did not validate. "
@@ -112,20 +126,15 @@ class JobspecTransformAgent(BaseSubAgent):
             )
         else:
             goal = (
-                f"Convert the provided job specification from '{from_manager}' to '{to_manager}'. "
+                f"Convert the provided job specification from {from_manager} to {to_manager}. "
                 f"The desired output format is a '{fmt}' script."
             )
 
-        # 2. Construct the System Prompt (Persona, Requirements, Instructions)
-        system_prompt = transform_prompt % (from_manager, to_manager)
-
-        # 3. Construct the Context payload
         context = f"### ORIGINAL SCRIPT\n{script}\n"
-
         if previous_jobspec is not None:
             context += f"\n### PREVIOUS ATTEMPT\n{previous_jobspec}\n"
 
-        # 4. Execute the loop inherited from BaseSubAgent
+        # Execute the loop inherited from BaseSubAgent
         result = await self.execute_loop(
             system_prompt=system_prompt,
             goal=goal,

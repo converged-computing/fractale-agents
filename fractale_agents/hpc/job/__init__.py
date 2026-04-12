@@ -1,1 +1,2 @@
-from .transform import JobspecTransformAgent
+from .generate import JobGenerateAgent
+from .transform import JobTransformAgent
