@@ -3,6 +3,7 @@
 > Agents to use with [fractale](https://github.com/converged-computing/fractale), agentic state-machine orchestrator for Science
 
 [![PyPI version](https://badge.fury.io/py/fractale-agents.svg)](https://badge.fury.io/py/fractale-agents)
+[![DOI](https://zenodo.org/badge/1171135008.svg)](https://doi.org/10.5281/zenodo.19654728)
 
 ![https://github.com/converged-computing/fractale/raw/main/img/fractale-small.png](https://github.com/converged-computing/fractale/raw/main/img/fractale-small.png)
 
