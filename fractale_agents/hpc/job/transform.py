@@ -1,9 +1,6 @@
-import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 
-import fractale_agents.utils as utils
 from fractale_agents.agent import BaseSubAgent
-from fractale_agents.logger import logger
 
 from .common import shared_constraints
 
@@ -29,9 +26,8 @@ You are an autonomous sub-agent with expertise in transforming job specification
 6. If the input script is not a workload manager batch file, you MUST return the JSON "jobspec" value as "noop".
 
 - When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
-  {"reason": "..."}
-- When you are finished, you MUST return a final JSON object:
-  {"action": "stop", "summary": "...", "issues": ["NO_ANALOGOUS: the parameter..."], "implications": "...", "jobspec": "#!/bin/bash ..."}
+- When you are finished, you MUST return ONE final JSON object:
+ {{"action": "stop", "summary": "...", "issues": ["NO_ANALOGOUS: the parameter..."], "implications": "...", "jobspec": "#!/bin/bash ...", "reason": "..."}}
 """
 
 
@@ -66,6 +62,11 @@ class JobTransformAgent(BaseSubAgent):
                 "type": "string",
                 "default": "batch",
                 "description": "Target format: 'batch' or 'jobspec' (canonical JSON representation).",
+            },
+            "instruction": {
+                "type": "string",
+                "default": None,
+                "description": "Extra context or instruction.",
             },
             "error": {
                 "type": ["string", "null"],
@@ -105,6 +106,7 @@ class JobTransformAgent(BaseSubAgent):
         from_manager: str,
         to_manager: str,
         fmt: str = "batch",
+        instruction: Optional[str] = None,
         error: Optional[str] = None,
         previous_jobspec: Optional[str] = None,
         max_turns: int = 100,
@@ -115,7 +117,7 @@ class JobTransformAgent(BaseSubAgent):
         """
         Executes the job specification transformation loop.
         """
-        from_manager = from_manger or "the detected workload manager"
+        from_manager = from_manager or "the detected workload manager"
 
         # System prompt and goal
         system_prompt = transform_prompt % (from_manager, to_manager)
@@ -133,6 +135,8 @@ class JobTransformAgent(BaseSubAgent):
         context = f"### ORIGINAL SCRIPT\n{script}\n"
         if previous_jobspec is not None:
             context += f"\n### PREVIOUS ATTEMPT\n{previous_jobspec}\n"
+        if instruction:
+            context += "\n" + instruction
 
         # Execute the loop inherited from BaseSubAgent
         result = await self.execute_loop(
