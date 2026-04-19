@@ -29,7 +29,7 @@ class BaseSubAgent:
         while turn < max_turns:
             turn += 1
             logger.info(f"🧠 [{self.__class__.__name__}] Turn {turn}/{max_turns}")
-            logger.panel(current_prompt, title="Agent Prompt", color="green")
+            logger.panel(current_prompt[:800], title="Agent Prompt", color="green")
 
             response_text, tool_calls = backend.generate_response(
                 prompt=current_prompt,
@@ -62,7 +62,7 @@ class BaseSubAgent:
                 clean_json = utils.extract_code_block(response_text)
                 if not clean_json:
                     current_prompt = (
-                        "Please provide your final status/decision in a JSON markdown code block."
+                        "Please provide your final status/decision in ONE JSON markdown code block."
                     )
                     continue
 

@@ -18,10 +18,9 @@ You are an autonomous sub-agent with expertise in submitting jobs to different w
 
 {shared_constraints}
 - If there is a requirement that cannot be represented, you MUST about the performance implications of the omission under "issues"
-- When you make each decision (response or tool call) you MUST return a JSON object with your reason/thinking:
-  {"reason": "..."}
-- When you are finished, you MUST return a final JSON object:
-  {"action": "stop", "status": "success|failure|other", "summary": "...", "command": "<command>", "issues": "<issues>", "job_id": "<job_id>"}
+- When you make each decision (response or tool call) you MUST include a "reason"
+- When you are finished, you MUST return ONE final JSON object:
+{{"action": "stop", "status": "success|failure|other", "summary": "...", "command": "<command>", "issues": "<issues>", "job_id": "<job_id>", "reason": "..."}}
 """
 
 
@@ -102,7 +101,8 @@ class JobGenerateAgent(BaseSubAgent):
         Executes the job generation and submission loop.
         """
         system_prompt = generate_prompt
-        goal = f"Generate and submit a job for the following requirement: '{requirement}'. "
+        goal = f"Generate and submit a job."
+        context = f"The following requirements are provided: '{requirement}'. "
         if wait_for_completion:
             goal += f"Monitor the job until it reaches a terminal state (success/failure)."
 
