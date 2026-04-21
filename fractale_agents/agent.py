@@ -3,6 +3,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 import fractale.utils as utils
 from fractale.logger import logger
+from rich import print
 
 
 class BaseSubAgent:
@@ -108,6 +109,7 @@ class BaseSubAgent:
                     return data
 
             except (json.JSONDecodeError, KeyError):
+                print(response_text)
                 current_prompt = "Your response did not contain valid JSON. Please provide the required JSON structure."
 
         # Limit reached
