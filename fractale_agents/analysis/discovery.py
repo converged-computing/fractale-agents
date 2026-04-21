@@ -18,6 +18,7 @@ You are a File Discovery and Data Analysis Agent. You specialize in navigating u
 - You MUST NOT read large files directly if a query tool (jq/grep) is available.
 - All extracted data and final reports MUST be written to the RESULT_ROOT.
 - You MUST provide a "reason" field in your JSON response for every turn to explain your analytical process.
+- You cannot request user interaction or ask questions.
 
 ### FINAL RESPONSE FORMAT
 When the goal is met, return:
@@ -52,7 +53,7 @@ class FileDiscoveryAgent(BaseSubAgent):
             },
             "max_turns": {
                 "type": "integer",
-                "default": 30,
+                "default": 100,
                 "description": "Max turns for the discovery loop.",
             },
         },
@@ -85,7 +86,7 @@ class FileDiscoveryAgent(BaseSubAgent):
         self,
         goal: str,
         context: str = None,
-        max_turns: int = 30,
+        max_turns: int = 100,
         process_callback: Optional[
             Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
         ] = None,
