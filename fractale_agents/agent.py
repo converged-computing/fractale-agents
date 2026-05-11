@@ -17,6 +17,7 @@ class BaseSubAgent:
         goal: str,
         context: str,
         max_turns: int = 100,
+        truncate=True,
         process_callback: Optional[
             Callable[[Dict[str, Any]], Awaitable[Optional[Dict[str, Any]]]]
         ] = None,
@@ -29,8 +30,11 @@ class BaseSubAgent:
 
         while turn < max_turns:
             turn += 1
+            display_prompt = current_prompt
+            if truncate:
+                display_prompt = current_prompt[:800]
             logger.info(f"🧠 [{self.__class__.__name__}] Turn {turn}/{max_turns}")
-            logger.panel(current_prompt[:800], title="Agent Prompt", color="green")
+            logger.panel(display_prompt, title="Agent Prompt", color="green")
 
             response_text, tool_calls = backend.generate_response(
                 prompt=current_prompt,
