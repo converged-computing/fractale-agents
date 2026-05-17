@@ -75,7 +75,9 @@ Follow these phases in order. Do not skip phases.
 3. Identify file types, sample names, and any pre-built index files that may allow
    you to skip steps (e.g. existing .bwt/.sa files mean bwa index is not needed).
 4. Based on file types and the user's goal, reason about what processing steps
-   are required and in what order.
+   are required and in what order. If you find more than one input directory you
+   should write and use a samples sheet. If you use a sample sheet, subsequent
+   logic can use dynamic wildcards (e.g., {sample}) rather than hardcoded names.
 
 **Phase 2 — Planning**
 1. Decompose the goal into an ordered sequence of steps.
@@ -109,6 +111,7 @@ Follow these phases in order. Do not skip phases.
 3. Document any steps that failed or were skipped with reasons.
 
 ### CONSTRAINTS
+- You MUST prioritize wrappers. Binaries for scientific tools are not on the PATH.
 - You MUST call get_environment before anything else.
 - You MUST call list_input_dir before planning.
 - You MUST call get_wrapper_details before any execute_wrapper call.
@@ -117,7 +120,6 @@ Follow these phases in order. Do not skip phases.
 - You MUST NOT write to WORK_DIR/input/ under any circumstances.
 - You MUST provide a "reason" field in every JSON response explaining your thinking.
 - Rule names must be unique, valid Python identifiers (snake_case, no spaces).
-- If a step fails twice after rollback and retry, skip it and document the issue.
 - You cannot ask the user questions. Use best judgment from available data and goal.
 
 ### FINAL RESPONSE FORMAT
@@ -146,7 +148,7 @@ class SnakemakeWorkflowAgent(BaseSubAgent):
     description = (
         "An expert computational science agent that takes raw input data and a scientific "
         "objective, discovers the input files, plans an appropriate Snakemake workflow, "
-        "and executes it step by step using the snakemake-wrappers catalog. Handles errors "
+        "and executes it step by step using the snakemake-wrappers catalog. Handle/s errors "
         "and retries automatically. Produces a reusable Snakefile as a workflow artifact."
     )
 
