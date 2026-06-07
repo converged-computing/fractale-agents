@@ -21,6 +21,8 @@ The following agents are availble.
 | optimize | General optimization agent | fractale_agents.optimize.OptimizeAgent |
 | job-transform | Job specification transformation agent | fractale_agents.hpc.job.JobTransformAgent |
 | job-generate | Job specification generation agent | fractale_agents.hpc.job.JobGenerationAgent |
+| job-analysis | Agent to analyze job application/software and/or intent | fractale_agents.hpc.job.JobAnalysisAgent |
+| script-analysis | Agent to analyze script application/software and/or intent | fractale_agents.hpc.job.ScriptAnalysisAgent |
 
 The general prompt agent is provisioned by fractale directly, `fractale.agents.general.PromptAgent`.
 Would you like to see an expert added? Please open an issue and let us know.
