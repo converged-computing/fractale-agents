@@ -23,6 +23,7 @@ The following agents are availble.
 | job-generate | Job specification generation agent | fractale_agents.hpc.job.JobGenerationAgent |
 | job-analysis | Agent to analyze job application/software and/or intent | fractale_agents.hpc.job.JobAnalysisAgent |
 | script-analysis | Agent to analyze script application/software and/or intent | fractale_agents.hpc.job.ScriptAnalysisAgent |
+| adversarial | Agent to assess response from another agent and fix | fractale_agents.general.AdversarialAgent |
 
 The general prompt agent is provisioned by fractale directly, `fractale.agents.general.PromptAgent`.
 Would you like to see an expert added? Please open an issue and let us know.
