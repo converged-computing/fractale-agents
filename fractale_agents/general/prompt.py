@@ -89,7 +89,7 @@ class PromptAgent:
     }
 
     async def __call__(
-        self, goal: str, task_context: str = "", max_turns: int = 10
+        self, goal: str, task_context: str = "", max_turns: int = 100
     ) -> Dict[str, Any]:
         """
         The internal orchestrator loop.

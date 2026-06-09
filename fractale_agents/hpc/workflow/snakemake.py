@@ -230,9 +230,7 @@ class SnakemakeWorkflowAgent(BaseSubAgent):
         """
         Executes the Snakemake workflow discovery and execution loop.
         """
-        goal_text = (
-            f"Design and execute a Snakemake workflow to accomplish the following:\n{goal}"
-        )
+        goal_text = f"Design and execute a Snakemake workflow to accomplish the following:\n{goal}"
 
         full_context = (
             "The MCP server has already staged your input data and configured your "
@@ -255,9 +253,7 @@ class SnakemakeWorkflowAgent(BaseSubAgent):
             result["status"] = "success"
         else:
             result["status"] = result.get("status", "failed")
-            result.setdefault(
-                "summary", "The workflow agent did not complete successfully."
-            )
+            result.setdefault("summary", "The workflow agent did not complete successfully.")
             result.setdefault("snakefile_path", "Snakefile")
 
         result.setdefault("steps_executed", [])
